@@ -1,4 +1,4 @@
-# .github/workflows/flow-check.yml
+# action.yml
 name: "🔀 flow-check"
 
 on:
