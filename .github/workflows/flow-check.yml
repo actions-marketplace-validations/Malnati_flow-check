@@ -1,0 +1,161 @@
+# .github/workflows/flow-check.yml
+name: "🔀 flow-check"
+
+on:
+  workflow_call:
+    outputs:
+      has_code:
+        description: "Indica se a PR contém alterações de código"
+        value: ${{ jobs.check-branch.outputs.has_code }}
+      allowed:
+        description: "Indica se o fluxo de branches é permitido (dev → staging → main)"
+        value: ${{ jobs.check-branch.outputs.allowed }}
+      head_branch:
+        description: "Nome da branch de origem da PR"
+        value: ${{ jobs.check-branch.outputs.head_branch }}
+      base_branch:
+        description: "Nome da branch de destino da PR"
+        value: ${{ jobs.check-branch.outputs.base_branch }}
+
+jobs:
+  check-branch:
+    runs-on: ubuntu-latest
+    outputs:
+      has_code: ${{ steps.check.outputs.has_code }}
+      allowed: ${{ steps.check.outputs.allowed }}
+      head_branch: ${{ steps.check.outputs.head_branch }}
+      base_branch: ${{ steps.check.outputs.base_branch }}
+
+    steps:
+      - name: Detect code changes and validate flow
+        id: check
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          debug: true
+          script: |
+            const pr = context.payload.pull_request;
+            const repo = context.payload.repository;
+
+            const codeExtensions = [
+              '.js', '.jsx', '.ts', '.tsx',
+              '.java', '.kt', '.kts',
+              '.py', '.rb', '.go',
+              '.php', '.cs',
+              '.c', '.cpp', '.h', '.hpp',
+              '.rs', '.swift',
+              '.sql',
+              '.sh', '.bash', '.ps1'
+            ];
+
+            let hasCode = false;
+            const perPage = 100;
+            let page = 1;
+
+            while (true) {
+              const response = await github.rest.pulls.listFiles({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                per_page: perPage,
+                page
+              });
+
+              const files = response.data || [];
+
+              if (!files.length) {
+                core.info(`ℹ️ No more files returned at page ${page}, stopping.`);
+                break;
+              }
+
+              const foundInPage = files.some(file =>
+                codeExtensions.some(ext =>
+                  file.filename.toLowerCase().endsWith(ext)
+                )
+              );
+
+              if (foundInPage) {
+                hasCode = true;
+                core.info(`✅ Found code changes on page ${page}, stopping early.`);
+                break;
+              }
+
+              const linkHeader = response.headers && response.headers.link;
+              if (!linkHeader || !linkHeader.includes('rel="next"')) {
+                core.info(`ℹ️ No 'next' link after page ${page}, reached last page.`);
+                break;
+              }
+
+              page += 1;
+            }
+
+            if (hasCode) {
+              core.info('🧾 Code changes detected in PR files.');
+            } else {
+              core.info('🧾 No code changes detected in PR files.');
+            }
+
+            const head = pr.head.ref;
+            const base = pr.base.ref;
+            const defaultBranch = repo.default_branch;
+
+            const devBranches = [
+              'dev',
+              'develop',
+              'development'
+            ];
+
+            const stageBranches = [
+              'staging',
+              'stage',
+              'hm',
+              'hom',
+              'homol',
+              'homolog',
+              'homologation',
+              'homologacao'
+            ];
+
+            const mainBranches = Array.from(new Set([
+              defaultBranch,
+              'main',
+              'master',
+              'prd',
+              'prod',
+              'production',
+              'producao'
+            ]));
+
+            const baseIsDev = devBranches.includes(base);
+            const baseIsStage = stageBranches.includes(base);
+            const baseIsMain = mainBranches.includes(base);
+
+            let allowed = true;
+
+            if (baseIsMain) {
+              allowed = stageBranches.includes(head);
+            } else if (baseIsStage) {
+              allowed = devBranches.includes(head);
+            }
+
+            core.info(`🔎 Branch flow check:
+              default_branch = ${defaultBranch}
+              head_branch    = ${head}
+              base_branch    = ${base}
+              has_code       = ${hasCode}
+              allowed        = ${allowed}
+            `);
+
+            if (hasCode && allowed) {
+              core.info('✅ Branch flow allowed for this PR.');
+            } else if (hasCode && !allowed) {
+              core.info('⛔ Branch flow NOT allowed for this PR.');
+            } else {
+              core.info('🟡 Branch flow check skipped because no code changes were found.');
+            }
+
+            core.setOutput('has_code', hasCode ? 'true' : 'false');
+            core.setOutput('allowed', allowed ? 'true' : 'false');
+            core.setOutput('default_branch', defaultBranch);
+            core.setOutput('head_branch', head);
+            core.setOutput('base_branch', base);
