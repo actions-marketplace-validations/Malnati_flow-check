@@ -1,5 +1,5 @@
 # action.yml
-name: "🔀 flow-check"
+name: "Branch flow check"
 
 on:
   workflow_call:
