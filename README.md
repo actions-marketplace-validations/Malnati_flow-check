@@ -12,8 +12,8 @@
   <a href="#-sobre">Sobre</a> •
   <a href="#-regras-do-fluxo">Regras</a> •
   <a href="#-instalação">Instalação</a> •
-  <a href="#-customizando-a-mensagem">Customização</a> •
-  <a href="#-inputs--outputs">Inputs & Outputs</a>
+  <a href="#-bloqueando-o-merge">Bloquear Merge</a> •
+  <a href="#-customizando-a-mensagem">Customização</a>
 </p>
 
 </div>
@@ -65,7 +65,7 @@ permissions:
   contents: read
 ```
 
-### Exemplo de Workflow
+### Exemplo Básico
 
 ```yaml
 name: "Governance Check"
@@ -86,10 +86,38 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Validate Branch Flow
-        uses: Malnati/flow-check@v2.0.0
+        id: guard  # Importante: Defina um ID para ler os outputs depois
+        uses: Malnati/flow-check@v2.2.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 ```
+
+-----
+
+## ⛔ Bloqueando o Merge (Enforcement)
+
+Por padrão, a action apenas avisa.  Para **impedir** o merge quando o fluxo estiver errado, você precisa de dois passos:
+
+### 1\. Adicione a falha condicional no Workflow
+
+Adicione este step logo após a validação. Ele fará o Job falhar se `allowed` for `false`.
+
+```yaml
+      - name: Block Merge on Violation
+        if: ${{ steps.guard.outputs.allowed == 'false' }}
+        run: |
+          echo "::error title=Policy Violation::O fluxo de branches é inválido. Merge bloqueado."
+          exit 1
+```
+
+### 2\. Configure a Proteção de Branch no GitHub
+
+Para que a falha do Job realmente desabilite o botão de Merge:
+
+1.  Vá em **Settings** \> **Branches** \> **Branch protection rules**.
+2.  Edite a regra da branch `main` (ou `staging`).
+3.  Marque ☑️ **Require status checks to pass before merging**.
+4.  Pesquise e selecione o job `flow-guard`.
 
 -----
 
@@ -98,13 +126,12 @@ jobs:
 Por padrão, esta action usa um template visual de "Dashboard". Se você quiser usar seu próprio layout Markdown, basta criar um arquivo no seu repositório e referenciá-lo.
 
 **1. Crie o arquivo `.github/templates/flow-msg.md`**
-Você pode usar as variáveis padrão (`$ACTOR`, `$SUBJECT`, etc.).
 
 **2. Aponte no Workflow:**
 
 ```yaml
       - name: Validate Branch Flow
-        uses: Malnati/flow-check@v2.0.0
+        uses: Malnati/flow-check@v2.2.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           custom_template: ".github/workflows/flow-check.md"
@@ -116,11 +143,11 @@ Veja o que o `flow-check` preenche automaticamente em cada variável do template
 
 | Variável | Conteúdo Preenchido pelo Flow Guard |
 | :--- | :--- |
-| `$TITLE` | "🔀 Branch Flow Guard" |
+| `$TITLE` | "🛡️ Branch Flow Guard" |
 | `$SUBJECT` | Visualização do fluxo com seta (ex: `feature/login → develop`) |
 | `$BODY_MESSAGE` | A mensagem de status principal (ex: "✅ Autorizado..." ou "⛔ Bloqueado..."). |
 | `$BODY_SCOPE_BLOCK` | Lista HTML contendo detalhes das branches e, em caso de erro, o motivo da violação. |
-| `$FOOTER_BLOCK` | Resumo do resultado ("Permitido", "Negado" ou "Skipped"). |
+| `$FOOTER_BLOCK` | Resumo do resultado HTML ("Resultado: Permitido", etc). |
 
 -----
 
@@ -138,7 +165,7 @@ jobs:
     steps:
       - name: Run Guard
         id: guard
-        uses: Malnati/flow-check@v1.0.0
+        uses: Malnati/flow-check@v2.2.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
