@@ -1,207 +1,193 @@
-<div align="center">
+Com base na evolução que construímos (separação de responsabilidades, outputs JSON ricos, suporte a Sticky Comments e validação dinâmica), o README antigo do `flow-check` está obsoleto.
 
-# 🛡️ Branch Flow Guard
+Abaixo está o **novo `README.md`** profissional, focado na nova arquitetura da **Branch Flow Guard Pro**. Ele documenta os inputs de configuração, o formato do JSON e fornece o "Workflow de Ouro" combinando as duas Actions.
 
-[![GitHub Marketplace](https://img.shields.io/badge/Marketplace-Branch%20Flow%20Guard-6f42c1?style=for-the-badge&logo=github)](https://github.com/marketplace/actions/branch-flow-guard)
-[![Version](https://img.shields.io/github/v/release/Malnati/flow-check?style=for-the-badge&color=purple)](https://github.com/Malnati/flow-check/releases)
-[![License](https://img.shields.io/github/license/Malnati/flow-check?style=for-the-badge&color=blue)](LICENSE)
+````markdown
+# 🛡️ Branch Flow Guard Pro
 
-**Imponha regras estritas de Git Flow e valide o conteúdo de PRs automaticamente.**
+[![GitHub Release](https://img.shields.io/github/v/release/Malnati/branch-flow-guard?style=for-the-badge&color=purple)](https://github.com/Malnati/branch-flow-guard/releases)
+[![License](https://img.shields.io/github/license/Malnati/branch-flow-guard?style=for-the-badge&color=blue)](LICENSE)
 
-<p align="center">
-  <a href="#-sobre">Sobre</a> •
-  <a href="#-regras-do-fluxo">Regras</a> •
-  <a href="#-instalação">Instalação</a> •
-  <a href="#-bloqueando-o-merge">Bloquear Merge</a> •
-  <a href="#-customizando-a-mensagem">Customização</a>
-</p>
+** Governança de código inteligente e modular para GitHub Actions.**
 
-</div>
+O **Branch Flow Guard Pro** é um analisador lógico de Pull Requests. Diferente de linters tradicionais, ele valida a **matemática do Git Flow** do seu projeto, garantindo que o ciclo de vida do software seja respeitado (ex: impedir merge de `feature` direto em `production`).
+
+> 💡 **Nota de Arquitetura:** Esta Action adere ao princípio de responsabilidade única. Ela **não posta comentários**. Ela analisa o fluxo e retorna um objeto JSON rico (com vereditos e orientações) para ser consumido por outras actions (como `Malnati/pr-comment`).
 
 ---
 
-## 🚀 Sobre
+## 🚀 Funcionalidades
 
-O **Branch Flow Guard** é um "porteiro" para seus Pull Requests. Ele analisa a origem e o destino de cada PR para garantir que o ciclo de vida do software seja respeitado (Dev → Staging → Prod).
-
-Além disso, ele detecta inteligentemente se há alterações reais de código ou apenas documentação, evitando bloqueios desnecessários em tarefas administrativas.
-
-### ✨ O que ele faz
-1.  **Validação de Fluxo:** Bloqueia merges diretos de `dev` para `production` ou features direto para `staging`.
-2.  **Smart Diff:** Ignora validações estritas se a mudança for apenas em arquivos de documentação (ex: `README.md`).
-3.  **Feedback Visual:** Posta um comentário claro no PR (estilo Dashboard) explicando o status.
-4.  **Integração:** Expõe `outputs` para você encadear outras actions (como auto-sync ou deploys).
+* **🛡️ Governança Configurável:** Defina quais branches são Produção, Staging e Desenvolvimento via inputs.
+* **🧠 Orientação Dinâmica:** Gera mensagens de erro educativas, explicando exatamente para qual branch o desenvolvedor deveria ter apontado a PR.
+* **⚡ Smart Bypass:** Detecta se a PR contém código fonte ou apenas documentação (opcional).
+* **JSON Output:** Retorna um payload completo para integrações avançadas (Slack, Teams, Dashboards).
 
 ---
 
-## 🚦 Regras do Fluxo
+## 📦 Inputs
 
-Esta Action impõe a seguinte esteira de promoção:
+Todos os inputs são opcionais (possuem defaults sensatos), mas totalmente configuráveis.
 
-```mermaid
-graph LR
-    DEV[Development] -->|✅ Permitido| STG[Staging]
-    STG[Staging] -->|✅ Permitido| MAIN[Production]
-    
-    FEAT[Feature/*] -.->|🚫 Bloqueado| MAIN
-    DEV -.->|🚫 Bloqueado| MAIN
+| Input | Descrição | Padrão |
+| :--- | :--- | :--- |
+| `token` | **Obrigatório**. Token do GitHub para ler arquivos da PR. | - |
+| `production_branches` | Lista de branches de Nível 1 (Produção). | `main, master, prod` |
+| `staging_branches` | Lista de branches de Nível 2 (Homologação). | `staging, homol, release` |
+| `development_branches` | Lista de branches de Nível 3 (Dev). | `dev, develop, development` |
+| `output_file` | Nome do arquivo JSON gerado no workspace. | `flow-compliance.json` |
+
+---
+
+## 📤 Outputs
+
+A action disponibiliza os resultados de duas formas:
+
+### 1. Variável de Output (`steps.id.outputs.result`)
+Um JSON stringificado contendo toda a análise.
+
+### 2. Arquivo Físico (`flow-compliance.json`)
+Ideal para upload de artefatos ou depuração.
+
+#### Exemplo do JSON Gerado
+```json
+{
+  "version": "1.2.0",
+  "timestamp": "2023-10-27T10:00:00Z",
+  "compliance": {
+    "allowed": false,
+    "violation_code": "PROD_VIOLATION"
+  },
+  "context": {
+    "head_branch": "feature/login",
+    "base_branch": "main"
+  },
+  "ui": {
+    "message_md": "🚫 **Produção** (main) requer origem em **Staging**.",
+    "guidance_md": "Para mergear em `main`, a branch de origem deve ser uma destas: **[staging, release]**.",
+    "color": "#d73a49"
+  }
+}
 ````
-
-  * **Production** (main/master) só aceita merges vindos de **Staging**.
-  * **Staging** (homolog/release) só aceita merges vindos de **Development**.
-  * Qualquer outra combinação gera um alerta de bloqueio.
 
 -----
 
-## 📦 Instalação
+## 🛠️ Exemplo de Uso (Workflow Completo)
 
-### Permissões Necessárias
+Este é o padrão recomendado: **Validação (Guard)** + **Notificação (Sticky Comment)** + **Bloqueio (Enforcement)**.
 
-Como esta action posta comentários no PR, você precisa conceder permissão de escrita.
-
-```yaml
-permissions:
-  pull-requests: write
-  contents: read
-```
-
-### Exemplo Básico
+Crie o arquivo `.github/workflows/branch-flow.yml`:
 
 ```yaml
-name: "Governance Check"
+name: "Branch Governance"
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, edited]
 
 permissions:
-  contents: read        # Necessário para o checkout
-  pull-requests: write  # Necessário para comentar na PR
+  contents: read        # Ler config do repo
+  pull-requests: write  # Postar comentários
 
-jobs:
-  flow-guard:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Validate Branch Flow
-        id: guard  # Importante: Defina um ID para ler os outputs depois
-        uses: Malnati/flow-check@v2.2.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-```
-
------
-
-## ⛔ Bloqueando o Merge (Enforcement)
-
-Por padrão, a action apenas avisa.  Para **impedir** o merge quando o fluxo estiver errado, você precisa de dois passos:
-
-### 1\. Adicione a falha condicional no Workflow
-
-Adicione este step logo após a validação. Ele fará o Job falhar se `allowed` for `false`.
-
-```yaml
-      - name: Block Merge on Violation
-        if: ${{ steps.guard.outputs.allowed == 'false' }}
-        run: |
-          echo "::error title=Policy Violation::O fluxo de branches é inválido. Merge bloqueado."
-          exit 1
-```
-
-### 2\. Configure a Proteção de Branch no GitHub
-
-Para que a falha do Job realmente desabilite o botão de Merge:
-
-1.  Vá em **Settings** \> **Branches** \> **Branch protection rules**.
-2.  Edite a regra da branch `main` (ou `staging`).
-3.  Marque ☑️ **Require status checks to pass before merging**.
-4.  Pesquise e selecione o job `flow-guard`.
-
------
-
-## 🎨 Customizando a Mensagem
-
-Por padrão, esta action usa um template visual de "Dashboard". Se você quiser usar seu próprio layout Markdown, basta criar um arquivo no seu repositório e referenciá-lo.
-
-**1. Crie o arquivo `.github/templates/flow-msg.md`**
-
-**2. Aponte no Workflow:**
-
-```yaml
-      - name: Validate Branch Flow
-        uses: Malnati/flow-check@v2.2.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          custom_template: ".github/workflows/flow-check.md"
-```
-
-### 🧩 Mapeamento de Variáveis
-
-Veja o que o `flow-check` preenche automaticamente em cada variável do template:
-
-| Variável | Conteúdo Preenchido pelo Flow Guard |
-| :--- | :--- |
-| `$TITLE` | "🛡️ Branch Flow Guard" |
-| `$SUBJECT` | Visualização do fluxo com seta (ex: `feature/login → develop`) |
-| `$BODY_MESSAGE` | A mensagem de status principal (ex: "✅ Autorizado..." ou "⛔ Bloqueado..."). |
-| `$BODY_SCOPE_BLOCK` | Lista HTML contendo detalhes das branches e, em caso de erro, o motivo da violação. |
-| `$FOOTER_BLOCK` | Resumo do resultado HTML ("Resultado: Permitido", etc). |
-
------
-
-## ⛓️ Exemplo Avançado (Job Chaining)
-
-Use os **Outputs** para controlar a execução de jobs subsequentes (ex: só rodar testes pesados se o fluxo for válido).
-
-```yaml
 jobs:
   governance:
     runs-on: ubuntu-latest
-    outputs:
-      allowed: ${{ steps.guard.outputs.allowed }}
-      has_code: ${{ steps.guard.outputs.has_code }}
     steps:
-      - name: Run Guard
-        id: guard
-        uses: Malnati/flow-check@v2.2.0
+      - uses: actions/checkout@v3
+
+      # 1. Analisa o Fluxo (Define as Regras)
+      - name: Branch Flow Guard
+        id: flow
+        uses: Malnati/branch-flow-guard@v1.2.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          # Personalize suas branches aqui:
+          production_branches: "main"
+          staging_branches: "homol, staging"
+          development_branches: "develop"
 
-  heavy-tests:
-    needs: governance
-    # Só roda se permitido E se tiver código (ignora docs)
-    if: ${{ needs.governance.outputs.allowed == 'true' && needs.governance.outputs.has_code == 'true' }}
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "Rodando testes..."
+      # 2. Carrega o JSON gerado
+      - name: Load Compliance Data
+        id: data
+        run: |
+          {
+            echo "json_content<<EOF"
+            cat flow-compliance.json
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      # 3. Notifica o Usuário (Comentário Inteligente/Sticky)
+      - name: Post Governance Comment
+        uses: Malnati/pr-comment@v6.1.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          pr_number: ${{ github.event.pull_request.number }}
+          template_path: .github/workflows/pr-comment-branch-flow.md # Crie este arquivo no seu repo
+          message_id: "branch-flow-guard-status" # Garante que o bot atualize o mesmo comentário
+          
+          header_title: "🛡️ Branch Flow Guard"
+          header_subject: "Validacao de Fluxo"
+          header_actor: "github-actions[bot]"
+          
+          # Renderiza a tabela de status baseada no JSON da etapa 1
+          body_message: |
+            <div align="center">
+            
+            | 🚦 Status | 🛫 Origem | 🛬 Destino |
+            | :---: | :---: | :---: |
+            | **${{ fromJson(steps.data.outputs.json_content).ui.message_md }}** | `${{ fromJson(steps.data.outputs.json_content).context.head_branch }}` | `${{ fromJson(steps.data.outputs.json_content).context.base_branch }}` |
+            
+            </div>
+          
+          # Exibe o veredito (apenas se bloquear)
+          footer_result: >-
+             ${{ !fromJson(steps.data.outputs.json_content).compliance.allowed && 
+             format('⛔ **Bloqueado** (Código: {0})', fromJson(steps.data.outputs.json_content).compliance.violation_code) || 
+             '' }}
+          
+          # Exibe a orientação educativa gerada pela Action
+          footer_advise: ${{ fromJson(steps.data.outputs.json_content).ui.guidance_md }}
+
+      # 4. Bloqueia o Merge se necessário
+      - name: Enforce Governance
+        if: ${{ !fromJson(steps.data.outputs.json_content).compliance.allowed }}
+        run: |
+          # Exibe a mensagem de erro no log do Actions
+          GUIDANCE="${{ fromJson(steps.data.outputs.json_content).ui.guidance_md }}"
+          CLEAN_GUIDANCE=$(echo "$GUIDANCE" | sed 's/\*\*//g' | sed 's/`//g')
+          
+          echo "::error title=Branch Flow Violation::$CLEAN_GUIDANCE"
+          exit 1
 ```
 
 -----
 
-## ⚙️ Inputs & Outputs
+## 🎨 Template Markdown Recomendado
 
-### Inputs
+Para o passo de comentário funcionar visualmente bem, crie o arquivo `.github/workflows/pr-comment-branch-flow.md` no seu repositório:
 
-| Input | Obrigatório | Padrão | Descrição |
-| :--- | :---: | :---: | :--- |
-| `token` | **Sim** | - | Token do GitHub (`secrets.GITHUB_TOKEN`) para ler diffs e postar comentários. |
-| `custom_template` | Não | `""` | Caminho relativo para um arquivo Markdown caso queira substituir o layout padrão. |
+```markdown
+## ${TITLE}
 
-### Outputs
+> [!NOTE]
+> **Fluxo de Referência (Governance):**
+>
+> 1. `✨ Feature/Fix` &rarr; 🛠️ **Development** _(develop)_
+> 2. 🛠️ **Development** &rarr; 🧪 **Staging** _(homol)_
+> 3. 🧪 **Staging** &rarr; 🚀 **Production** _(main)_
+>
+> *Siga estritamente a ordem sequencial acima.*
 
-| Output | Tipo | Descrição |
-| :--- | :---: | :--- |
-| `allowed` | `true/false` | Define se o fluxo de branches respeita as regras. |
-| `has_code` | `true/false` | Define se há alterações em arquivos de código (ignora docs). |
-| `head_branch` | String | Nome da branch de origem (ex: `feature/login`). |
-| `base_branch` | String | Nome da branch de destino (ex: `develop`). |
+${BODY_MESSAGE}
+
+${FOOTER_BLOCK}
+```
 
 -----
 
-<div align="center">
+\<div align="center"\>
+\<sub\>Developed by \<a href="https://github.com/Malnati"\>Ricardo Malnati\</a\>\</sub\>
+\</div\>
 
-<sub>Security & Governance by <a href="https://github.com/Malnati">Ricardo Malnati</a>.</sub>
-
-</div>
+```
+```
