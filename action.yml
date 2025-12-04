@@ -11,7 +11,11 @@ inputs:
   token:
     description: "GitHub token (ex.: secrets.GITHUB_TOKEN)"
     required: true
-
+  custom_template:
+    description: "Caminho opcional para um template Markdown personalizado"
+    required: false
+    default: ""
+    
 outputs:
   allowed:
     description: "Boolean: Is the branch flow allowed?"
@@ -176,7 +180,23 @@ runs:
           echo "$SCOPE_BLOCK"
           echo "EOF"
         } >> "$GITHUB_OUTPUT"
-
+        
+    - id: resolve_template
+      shell: bash
+      env:
+        USER_TEMPLATE: ${{ inputs.custom_template }}
+        INTERNAL_TEMPLATE: ${{ github.action_path }}/templates/message.md
+      run: |
+        set -euo pipefail
+        
+        if [ -n "$USER_TEMPLATE" ]; then
+          echo "Usuário definiu um template personalizado: $USER_TEMPLATE"
+          echo "final_path=$USER_TEMPLATE" >> "$GITHUB_OUTPUT"
+        else
+          echo "Usando template padrão da Action (Internal)."
+          echo "final_path=$INTERNAL_TEMPLATE" >> "$GITHUB_OUTPUT"
+        fi
+        
     # ------------------------------------------------------------------
     # STEP 5: POSTAR COMENTÁRIO
     # ------------------------------------------------------------------
@@ -193,5 +213,4 @@ runs:
         body_scope: ${{ steps.build_message.outputs.body_scope }}
         footer_result: ${{ steps.build_message.outputs.footer_result }}
         footer_advise: ${{ steps.build_message.outputs.footer_advise }}
-        # TRUQUE: Usa github.action_path para pegar o arquivo DENTRO desta action composite
-        template_path: ${{ github.action_path }}/templates/message.md
+        template_path: ${{ steps.resolve_template.outputs.final_path }}
