@@ -1,40 +1,51 @@
-# flow-check
+# ⚠️ Action Movida e Renomeada
 
-Fluxo reutilizável de validação de Pull Requests para GitHub Actions.
+> [!CAUTION]
+> **Este repositório (`Malnati/flow-check`) foi descontinuado.**
+>
+> A lógica de validação foi refatorada para aderir ao Princípio de Responsabilidade Única e agora vive em um novo repositório com melhor performance e flexibilidade.
 
-Este workflow verifica:
+## 🚀 Novo Endereço
 
-- Se a PR contém alterações de código
-- Se o fluxo de branches está de acordo com a promoção dev → staging → main
+Por favor, atualize seus workflows para utilizar a nova Action:
 
-Expondo as saídas:
+### 👉 [**Malnati/branch-flow-guard**](https://github.com/Malnati/branch-flow-guard)
 
-- `has_code`: `"true"` ou `"false"`
-- `allowed`: `"true"` ou `"false"`
-- `head_branch`: nome da branch de origem
-- `base_branch`: nome da branch de destino
+---
 
-## Uso
+## 🛠️ Guia de Migração Rápida
 
-No repositório que contém as PRs:
+A nova arquitetura separa a **Lógica** da **Notificação**.
+
+### ❌ Como era (Antigo)
+```yaml
+- uses: Malnati/flow-check@v2
+  with:
+    token: ${{ secrets.GITHUB_TOKEN }}
+````
+
+### ✅ Como é agora (Novo)
+
+Você deve usar a nova action de análise combinada com a action de comentário:
 
 ```yaml
-name: "PR flow"
+# 1. Analisa o fluxo
+- uses: Malnati/branch-flow-guard@v1
+  id: flow
+  with:
+    token: ${{ secrets.GITHUB_TOKEN }}
 
-on:
-  pull_request:
-    types: [opened, synchronize, reopened]
+# 2. Comenta o resultado (Sticky Mode)
+- uses: Malnati/pr-comment@v6
+  with:
+    token: ${{ secrets.GITHUB_TOKEN }}
+    pr_number: ${{ github.event.pull_request.number }}
+    # ... inputs de configuração do template
+```
 
-jobs:
-  flow-check:
-    uses: SEU_USUARIO/flow-check/.github/workflows/flow-check.yml@v1
+Para documentação completa e exemplos, visite o [novo repositório](https://github.com/Malnati/branch-flow-guard).
 
-  auto-sync:
-    needs: flow-check
-    if: ${{ needs.flow-check.outputs.has_code == 'true' && needs.flow-check.outputs.allowed == 'true' }}
-    uses: SEU_USUARIO/auto-sync/.github/workflows/auto-sync.yml@v1
-    with:
-      base_branch: ${{ needs.flow-check.outputs.base_branch }}
-      head_branch: ${{ needs.flow-check.outputs.head_branch }}
-      pr_number: ${{ github.event.pull_request.number }}
-      changed_files: ${{ github.event.pull_request.changed_files }}
+-----
+> [!CAUTION]
+> Esta versão antiga não receberá mais atualizações.
+
